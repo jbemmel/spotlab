@@ -1,0 +1,392 @@
+---
+- name: Get instance {{instance_id}} facts including public IP
+  register: ec2_instance_facts
+  ec2_instance_facts:
+    instance_ids: [ "{{instance_id}}" ]
+    region: "{{ cheapest_region | default( AWS_REGION ) }}"    # Default from local_settings
+- debug: var=ec2_instance_facts   # public_ip_address
+
+- block:
+  - name: Update ~/.ssh/config file for easy access to AWS host
+    tags: ssh_config
+    vars:
+      _az: "{{ _i.placement.availability_zone }}"
+    blockinfile:
+      dest: ~/.ssh/config
+      create: true
+      mode: 0600
+      marker: "# {mark} Include AWS bare metal instances in region {{ cheapest_region }}"
+      block: |
+        StrictHostKeyChecking   no
+        UserKnownHostsFile      /dev/null
+        IdentityFile /home/awslab/.ssh/id_rsa
+
+        # AWS bare metal instances, Include has permissions / lookup issues
+        # Include /home/simplify/.ssh/aws_bare_metal
+        # AWS bare metal {{_kind}} instance {{ instance_id }} in AZ {{ _az }}
+        Host aws.{{_az}}
+          HostName {{ _i.public_ip_address }}
+          # root account is 'centos'
+          User simplify
+
+  - name: Allocate secondary private IPs ( private_ips == {{ _private_ips }} )
+    vars:
+      _private_ips: "{{ private_ips|default(4) }}"
+    when: "_instance_type == 'i3.metal'
+          and _nic.private_ip_addresses | length == 1"
+    local_action: command aws ec2 assign-private-ip-addresses
+                  --region {{_region}}
+                  --network-interface-id {{_nic.network_interface_id}}
+                  --secondary-private-ip-address-count {{ _private_ips }}
+
+  - name: Get current IPv6 CIDR assigned
+    ec2_vpc_net_facts:
+      region: "{{ _region }}"
+      vpc_ids: "{{ _nic.vpc_id }}"
+    register: vpc_facts
+
+  - name: Find first associated IPv6 CIDR block
+    when: "item.ipv6_cidr_block_state.state == 'associated'"
+    with_items: "{{ vpc_facts.vpcs[0].ipv6_cidr_block_association_set | default([]) }}"
+    set_fact:
+      ipv6_cidr: "{{ item.ipv6_cidr_block }}"  # This is a /56
+
+  - name: Allocate IPv6/56 CIDR for VPC
+    when: ipv6_cidr is not defined
+    local_action: command aws ec2 associate-vpc-cidr-block --region {{_region}}
+                  --vpc-id {{ _nic.vpc_id }} --amazon-provided-ipv6-cidr-block
+
+  - name: Get IPv6 CIDR assigned
+    ec2_vpc_net_facts:
+      region: "{{ _region }}"
+      vpc_ids: "{{ _nic.vpc_id }}"
+    register: vpc_facts
+
+  - name: Find first associated IPv6 CIDR block again
+    when: "item.ipv6_cidr_block_state.state == 'associated'"
+    with_items: "{{ vpc_facts.vpcs[0].ipv6_cidr_block_association_set }}"
+    set_fact:
+      ipv6_cidr: "{{ item.ipv6_cidr_block }}"  # This is a /56
+
+  - name: Get subnet details
+    ec2_vpc_subnet_facts:
+      region: "{{ _region }}"
+      subnet_ids: "{{ _nic.subnet_id }}"
+    register: subnet_facts
+
+  - name: Find first associated IPv6 CIDR block for subnet
+    when: "item.ipv6_cidr_block_state.state == 'associated'"
+    with_items: "{{ subnet_facts.subnets[0].ipv6_cidr_block_association_set }}"
+    set_fact:
+      subnet_cidr6: "{{ item.ipv6_cidr_block }}"  # This is a /64
+      cidr_associated: true
+
+  - name: Pick a non-overlapping /64 block if not already assigned
+    when: subnet_cidr6 is not defined
+    vars:
+      _rank: "{{ subnet_facts.subnets[0].cidr_block.split('.')[2] | int / 16 }}"  # Avoid overlap amongst default subnets
+    set_fact:
+      subnet_cidr6: "{{ ipv6_cidr | ipsubnet(64,_rank|int) }}"
+
+  - name: Allocate IPv6 addresses for subnet
+    when: not cidr_associated|default(false)
+    local_action: command aws ec2 associate-subnet-cidr-block
+                  --region {{_region}}
+                  --subnet-id {{ _nic.subnet_id }}
+                  --ipv6-cidr-block {{ subnet_cidr6 }}
+
+  # Can do this in template for on demand instance, but not Spot instance
+  - name: Allocate IPv6 addresses for lab VMs or containers
+    when: _instance_type == 'i3.metal' and (allocate_ipv6 is not defined or allocate_ipv6 is failed)
+    with_items: [ 0, 32, 64, 96 ] # Try different offsets to support multiple instances per region
+    vars:
+      _sep: '" "'
+      _ipv6_list:
+        - "{{ subnet_cidr6 | ipaddr(4+item ) | ipaddr('address') }}"   # Instance, 1..3 are reserved
+        - "{{ subnet_cidr6 | ipaddr(16+item) | ipaddr('address') }}"   # /124 subnet base
+        - "{{ subnet_cidr6 | ipaddr(17+item) | ipaddr('address') }}"   # /124 subnet gw
+        - "{{ subnet_cidr6 | ipaddr(18+item) | ipaddr('address') }}"   # Proxy
+        - "{{ subnet_cidr6 | ipaddr(19+item) | ipaddr('address') }}"   # VSC#1
+        - "{{ subnet_cidr6 | ipaddr(20+item) | ipaddr('address') }}"   # VSC#2
+        - "{{ subnet_cidr6 | ipaddr(21+item) | ipaddr('address') }}"   # VSC#3
+        - "{{ subnet_cidr6 | ipaddr(22+item) | ipaddr('address') }}"   # VSC#4
+        - "{{ subnet_cidr6 | ipaddr(23+item) | ipaddr('address') }}"   # NSG#1
+        - "{{ subnet_cidr6 | ipaddr(24+item) | ipaddr('address') }}"   # NSG#2
+        - "{{ subnet_cidr6 | ipaddr(25+item) | ipaddr('address') }}"   # NSG#3
+        - "{{ subnet_cidr6 | ipaddr(26+item) | ipaddr('address') }}"   # NSG#4
+    ignore_errors: true # Retry next offset
+    register: allocate_ipv6
+    local_action: command aws ec2 assign-ipv6-addresses --region {{_region}}
+                  --network-interface-id {{_nic.network_interface_id}}
+                  --ipv6-addresses "{{ _ipv6_list | join(_sep) }}"
+
+  - name: Check that IPv6 allocation succeeded {{ allocate_ipv6 }}
+    assert:
+      that: allocate_ipv6.changed | default(0)
+      msg: "Unable to allocate IPv6 addresses in the default VPC/subnet for this region {{_region}}"
+
+  - name: Get allocated private IPs and IPv6 IPs
+    tags: always
+    register: ec2_instance_facts
+    ec2_instance_facts:
+      instance_ids: [ "{{instance_id}}" ]
+      region: "{{ _region }}"
+
+  vars:
+    _i: "{{ ec2_instance_facts.instances[0] }}"
+    _nic: "{{ _i.network_interfaces[0] }}"
+    _region: "{{ _i.placement.availability_zone[0:-1] }}"
+
+- block:
+  - name: Explain limitation/benefits, flag={{_vsc_eips}}
+    debug:
+      msg: |
+        Elastic IPs for VSCs allow physical NSGs to connect using IPv4.
+        However, AWS by default allows max. 5 EIPs/region per account.
+        To enable, set 'use_elastic_ip_for_vsc'
+  - name: Allocate Elastic IPs for VSCs, scarce resource (max 5/region)
+    when: _vsc_eips
+    block:
+    - name: List current Elastic IPs
+      # ec2_eip_facts:  Ansible 2.6
+      #   region: "{{ _region }}"
+      command: aws ec2 describe-addresses --region {{_region}}
+      register: elastic_ips
+    - debug: var=elastic_ips
+    - name: Release the ones not associated
+      when: item.InstanceId is not defined
+      vars:
+        _json: "{{ elastic_ips.stdout|default('{}')|from_json }}"
+      with_items: "{{ _json.Addresses | default([]) }}"
+      ec2_eip:
+        region: "{{ _region }}"
+        public_ip: "{{ item.PublicIp }}"
+        state: absent
+        in_vpc: yes
+        release_on_disassociation: yes
+
+    # Need to do this in 2 steps - module is buggy
+    - name: Allocate an Elastic IP for each secondary private IP, excluding primary
+      with_items: "{{ _i.network_interfaces[0].private_ip_addresses }}"
+      when: not item.primary
+      # ignore_errors: true # EIPs may already be allocated to the account, need to release all of them
+      register: elastic_ips
+      ec2_eip:
+        state: present # Only allocate, dont assign yet
+        in_vpc: yes
+        region: "{{ _region }}"
+        reuse_existing_ip_allowed: "{{ item.association is defined }}"  # Must allocate new ones unless already done
+
+    - debug: var=elastic_ips
+    - name: Assign an Elastic IP to each secondary private IP, excluding primary
+      with_indexed_items: "{{ _i.network_interfaces[0].private_ip_addresses }}"
+      when: not item.1.primary
+      ec2_eip:
+        public_ip: "{{ elastic_ips.results[ item.0 ].public_ip }}"
+        device_id: "{{ _i.network_interfaces[0].network_interface_id }}"
+        private_ip_address: "{{ item.1.private_ip_address }}"
+        in_vpc: yes
+        region: "{{ _region }}"
+        reuse_existing_ip_allowed: yes
+
+    - name: Get updated Elastic IP associations
+      tags: always
+      register: updated_ec2_instance_facts
+      ec2_instance_facts:
+        instance_ids: [ "{{instance_id}}" ]
+        region: "{{ _region }}"
+
+  - name: Build inventory_host for the new AWS instance
+    add_host:
+      name: "BaremetalInstance"
+      groups: [ "servers", "physical_servers" ]
+      ansible_user: centos
+      ansible_host: "{{ _i.public_ip_address }}" # XXX make sure this is not replaced by an Elastic IP
+
+  - name: Wait for AWS host to become reachable via SSH on Public IP {{ _i.public_ip_address }}
+    wait_for:
+      port: "22"
+      host: "{{ _i.public_ip_address }}"
+      sleep: 1  # default
+      timeout: 900  # default is 300 seconds
+      connect_timeout: 3         # default is 5 seconds
+    retries: 3
+    register: _ssh_connect
+    until: _ssh_connect is not failed  # Host can reset connection sometimes, retry
+    connection: local
+
+  - block:
+    - name: Remove bogus eth0 config file created by cloud-init
+      file: path="/etc/sysconfig/network-scripts/ifcfg-eth0" state=absent
+    - name: Define available disks, hardcoded for now
+      set_fact:
+        instance_disks:
+          - { dev: "/dev/nvme1n1", path: '/home/simplify' }
+          - { dev: "/dev/nvme2n1", path: '/home/images' }
+          - { dev: "/dev/nvme3n1", path: '/var/lib/docker' }  # For overlay FS, becomes large
+          # 5 more available, only nvme0n1 is available on boot (8GB)
+    - name: Format disks (more space available, TODO use it)
+      when: not skip_mkfs|default( 'skip_mkfs' in ansible_run_tags )|bool
+      with_items: "{{ instance_disks }}"
+      command: mkfs -t xfs {{item.dev}}
+    - name: Mount disks permanently
+      with_items: "{{ instance_disks }}"
+      mount:
+        src: "{{ item.dev }}"
+        path: "{{ item.path }}"
+        state: mounted            # Creates directory if not existing
+        fstype: xfs
+
+    - name: Enable Intel IOMMU and reserve 4GB for huge pages in Grub config, for DPDK
+      vars:
+        _flags: "iommu=pt intel_iommu=on default_hugepagesz=1G hugepagesz=1G hugepages=4"
+      command: sed -i 's/console=ttyS0,115200"/console=ttyS0,115200 {{_flags}}"/g' /etc/default/grub
+    - name: Regenerate Grub config; requires reboot
+      shell: /usr/sbin/grub2-mkconfig > /boot/grub2/grub.cfg
+
+    - name: Create AWS Lab log directory on EBS volume
+      file: path=/var/log/awslab state=directory mode=0755
+
+    #- name: Install Simplify; container uses AWS DNS from /etc/resolv.conf
+    #  become: no
+    #  local_action: shell ssh_user=centos log_path=/var/log/awslab /simplify/Docker/install_simplify.sh {{ _ip }}
+
+    - name: Copy config and SSH keys, any license files
+      ignore_errors: "{{ _file.optional|default(0)|bool }}"  # Optional items
+      loop_control:
+        loop_var: _file
+      with_items:
+        # TODO - { 'src' : '/home/awslab/nuage.license', 'path' : '' }
+        - { 'src' : '/home/awslab/.ssh/id_rsa', 'path' : '.ssh/', 'mode' : '0400' }
+        - { 'src' : '/home/awslab/.ssh/id_rsa.pub', 'path' : '.ssh/' }
+        # Make sure this gets the right SELinux context system_u:object_r:usr_t:s0
+        - { 'src' : '/home/simplify/.ssh/authorized_keys',
+            'path' : '.ssh/authorized_keys', setype: 'usr_t' }
+      copy:
+        src: "{{ _file.src }}"
+        dest: "/home/simplify/{{ _file.path }}"
+        mode: "{{ _file.mode | default( '0644' ) }}"
+        owner: 'simplify'
+        group: 'simplify'
+        setype: "{{ _file.setype | default('_default') }}"
+
+    - name: Allow 'awslab' group to use sudo without password
+      become: true
+      lineinfile:
+        path: /etc/sudoers
+        insertafter: "^%wheel.*"
+        line: "%awslab        ALL=(ALL)       NOPASSWD: ALL # added by AWS Lab"
+
+    #- name: Start rsync daemon (uses tcp port 873)
+    #  service: name=rsyncd state=started
+
+    - name: TODO Upload git repo contents to /home/awslab/
+      when: False
+      delegate_to: localhost
+      become: false
+      #synchronize:
+      #  src: ~/adventure/
+      #  dest: /home/simplify/adventure/
+      # command: "rsync -avzhe ssh --exclude=.git ~/adventure simplify@{{_ip}}:adventure"
+      shell: "tar zc ~/adventure/simplify/ | ssh awslab@{{_ip}} 'tar zx -C /'"
+
+    - name: Install containerlab
+      become: true
+      command: bash -c "$(curl -sL https://get-clab.srlinux.dev)"
+
+    - name: Read local settings
+      include_vars: file='~/local_settings.yml' name=local_settings
+    - name: Copy local settings, override DNS, NTP, SMTP
+      vars:
+        _priv_ips: "{{ _i.network_interfaces[0].private_ip_addresses[1:] }}"  # Excluding first, primary
+        _ipv6_ips: "{{ _i.network_interfaces[0].ipv6_addresses | map(attribute='ipv6_address') | list }}"
+        _elastic_ips: "{{ _priv_ips | map(attribute='association') | map(attribute='public_ip') | list
+                          if _vsc_eips else [] }}"
+
+        # AWS SES has endpoints in us-east-1 and us-west-2 (and Europe)
+        _ses_region: "{{ 'us-west-2' if 'us-west' in _region else 'us-east-1' }}"
+        _ses_endpoint: "email-smtp.{{ _ses_region }}.amazonaws.com"
+
+        _overrides:
+          dns_servers: [ "8.8.4.4", "8.8.8.8" ]
+          ntp_servers: [ "0.centos.pool.ntp.org", "1.centos.pool.ntp.org", "2.centos.pool.ntp.org" ]
+          AWS_REGION: "{{ _region }}"  # TODO move under aws: below
+          awslab_cache_downloads_in_s3: true
+          aws:
+            instance_id: "{{ _i.instance_id }}"
+            vpc_ipv6_cidr: "{{ ipv6_cidr }}"
+            availability_zone: "{{ _i.placement.availability_zone }}"
+            public_ip: "{{ _ip }}"
+            public_fqdn: "{{ _i.network_interfaces[0].association.public_dns_name }}"
+            primary_ip: "{{ _i.private_ip_address }}"
+            elastic_ips: "{{ _elastic_ips }}"
+            private_ips: "{{ _priv_ips | map(attribute='private_ip_address') | list }}"
+            ipv6_ips: "{{ _ipv6_ips[1:] }}"
+            ipv6_prefix: 124
+            # ipv6_local_subnet: "{{ subnet_cidr6 | ipsubnet(125,1) }}"  # Extremely inefficient
+            ses_region: "{{ _ses_region }}" # Used when sending test e-mail
+          smtp:
+            # from: Assume this is set in local_settings
+            host: "{{ _ses_endpoint }}"
+            port: 465  # 587 uses STARTTLS but results in timeout errors, 465 + secure works better
+            authMethod: "login"
+            auth:
+              user: "{{ local_settings.AWS_SMTP_ACCESS_KEY_ID | default( 'TODO: configure AWS_SMTP_ACCESS_KEY_ID' ) }}"
+              pass: "{{ local_settings.AWS_SMTP_SECRET_ACCESS_KEY | default( 'TODO: configure AWS_SMTP_SECRET_ACCESS_KEY' ) }}"
+            secureConnection: True # Together with port 465 implicit SSL
+      copy:
+        dest: /home/awslab/local_settings.yml
+        owner: 'awslab'
+        group: 'awslab'
+        content: "{{ local_settings | combine( _overrides, recursive=True ) | to_yaml }}"
+    - name: Generate default inventory file with only local Docker host
+      copy:
+        dest: /home/awslab/hosts
+        owner: 'awslab'
+        group: 'awslab'
+        content: |
+          [servers]
+          aws_docker_host ansible_host=172.17.0.1 ansible_user=awslab
+
+    - name: Check if iptables is already configured
+      register: iptables_check
+      ignore_errors: true
+      changed_when: false
+      command: iptables -C FORWARD -j ACCEPT
+    - block:
+      - name: Install iptables service
+        yum: name=iptables-services state=latest
+      - name: Enable iptables service
+        service: name=iptables state=restarted enabled=yes
+      - name: Configure MASQUERADE for VM IPs, allow forwarding, save
+        with_items:
+          - "iptables -t nat -I POSTROUTING -o br0 -j MASQUERADE"   # 'br0' defined in lab_network above
+          - "iptables -I FORWARD -j ACCEPT"
+          - "service iptables save"
+        command: "{{item}}"
+      - name: Restart docker after installing iptables
+        service: name=docker state=restarted enabled=yes
+
+      when: iptables_check.rc != 0
+
+    - name: Deploy AWS Lab container with toolkit to init host
+      command: docker run -d --name awslab -v /home/awslab:/awslab:Z eccloud/awslab /bin/bash
+    delegate_to: "BaremetalInstance"
+    become: true
+    become_user: root
+
+  - name: Explain next steps
+    debug:
+      msg: |
+        The system is ready for use.
+        To connect:
+          ssh awslab@{{ _i.public_ip_address }}
+
+  vars:
+    _facts: "{{ updated_ec2_instance_facts if updated_ec2_instance_facts is defined and
+                not updated_ec2_instance_facts.skipped|default(0) else ec2_instance_facts }}"
+    _i: "{{ _facts.instances[0] }}"
+    _ip: "{{ _i.public_ip_address }}"
+    _region: "{{ _i.placement.availability_zone[0:-1] }}"
+    _vpc_cidr: "{{ ( _i.private_ip_address + '/20' ) | ipaddr(0) }}"  # XXX Hardcoded assumption that VPC uses /20 subnets
+    _vsc_eips: "{{ use_elastic_ip_for_vsc|default(0)|bool }}"

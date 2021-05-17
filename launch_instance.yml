@@ -1,0 +1,156 @@
+# Launches a cheap Spot i3.metal instance in any region
+
+---
+
+- hosts: localhost
+  connection: local
+  gather_facts: no
+  tasks:
+    - include_vars: ~/local_settings.yml
+
+    - name: Get current time from Internet, for this public IP
+      ignore_errors: true
+      register: current_time
+      uri:
+        url: "http://worldtimeapi.org/api/ip"
+    - debug: msg="Current time based on container effective public IP {{current_time.json|default('?')}}"
+    - block:
+      - name: Get the current AWS user identity information
+        aws_caller_info:
+        register: aws_user
+      - debug: var=aws_user
+      - block:
+        # Simply listing all zones doesn't work - spot request doesn't get fulfilled, even if the price in some AZs is lower than the bid
+        - name: Figure out which Region/AZs are currently the cheapest, set 'pick_region' to override (Auth fail? check your ntp sync)
+          with_items: "{{ _selected_regions }}"
+          local_action: shell aws ec2 describe-spot-price-history --region {{item}} --start-time=$(date +%s) --product-descriptions="Linux/UNIX"
+                          --query 'SpotPriceHistory[*].{az:AvailabilityZone, price:SpotPrice}' --instance-types {{_instance_type}}
+          register: _spot_price_history
+
+        - debug: var=_spot_price_history
+
+        - name: Sort out pricing, find region with lowest price and most AZs at that price
+          when: item.0 != exclude_region|default('') and _prices!=[]
+          with_together:
+            - "{{ _selected_regions }}"
+            - "{{ _spot_price_history.results }}"
+          vars:
+            _prices: "{{ item.1.stdout|from_json|sort(attribute='az')|sort(attribute='price') }}"
+            _cheap_azs: "{{ _prices | selectattr('price','eq',_prices[0].price) | list }}"
+            _lowest_price: "{{ _prices[0].price if lowest_price is not defined or lowest_price|float > _prices[0].price|float else lowest_price }}"
+            _most_cheap_azs: "{{ _cheap_azs|length if most_cheap_azs is not defined or _cheap_azs|length > most_cheap_azs|int else most_cheap_azs }}"
+            _is_best: "{{ _prices[0].price == _lowest_price and _cheap_azs|length == _most_cheap_azs|int }}"
+          set_fact:
+            spot_prices: "{{ spot_prices|default({})|combine({item.0:_prices}) }}"
+            lowest_price: "{{ _lowest_price }}"
+            most_cheap_azs: "{{ _most_cheap_azs }}"
+            cheapest_region: "{{ item.0 if _is_best else cheapest_region }}"
+            cheapest_region_azs: "{{ _cheap_azs if _is_best else cheapest_region_azs }}"
+
+        - debug: var=spot_prices
+        - debug: var=cheapest_region_azs
+
+        - name: Create key pair using simplify key
+          ec2_key:
+            name: "{{ _keypair }}"
+            key_material: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+            region: "{{ cheapest_region }}"
+
+        - name: Make sure a default VPC exists in {{ cheapest_region }}
+          ignore_errors: true
+          local_action: command aws ec2 create-default-vpc --region {{ cheapest_region }}
+
+        - name: Make sure default subnets exist in all selected AZs
+          with_items: "{{ cheapest_region_azs }}"
+          ignore_errors: true
+          local_action: command aws ec2 create-default-subnet --region {{ cheapest_region }} --availability-zone {{ item.az }}
+
+# TODO Could generate the template based on Jinja2, and include N>=1 instances
+        - name: Deploy CloudFormation template in {{cheapest_region_azs}}
+          when: not retry|default(false)
+          vars:
+            _template: "{{ lookup('file','aws_spot_baremetal.template') }}"
+            _desc: "{{_kind}} {{_instance_type}}, spot price at launch ${{cheapest_region_azs[0].price}}/hour"
+            _azs: "{{ cheapest_region_azs|map(attribute='az')| list }}"
+            _exclude: []  # us-east-1d sometimes has capacity issues
+          register: aws_output
+          cloudformation:
+            stack_name: "{{ _formatted_name }}"
+            region: "{{ cheapest_region }}"
+            template_body: "{{ _template | from_yaml | combine( { 'Description' : _desc } ) }}"
+            template_parameters:
+              KeyPair: "{{ _keypair }}"  # Use per-user key
+              InstanceType: "{{ _instance_type }}"
+              CurSpotPrice: "{{ cheapest_region_azs[0].price }}"
+              MaxSpotPrice: "{{ _spot_price }}"
+              AvailabilityZones: "{{ _azs | difference( _exclude ) | join(',') }}"
+            tags:
+              Nuage: Simplify
+        - debug: var=aws_output
+
+        - name: Wait until spot instance in stack {{_formatted_name}} has been allocated
+          when: "retry|default(false) or aws_output.stack_outputs.InstanceId == 'TBA'"
+          ec2_asg_facts:
+            name: "{{ _formatted_name }}"
+            region: "{{ cheapest_region }}"
+          register: asgs
+          retries: 10
+          delay: 30
+          until: asgs.results is defined and asgs.results | length > 0 and asgs.results[0].instances | default([]) != []
+        - debug: var=asgs
+        - name: Finish configuring the instance {{_id}}, add private IPs, allocate Elastic IPs
+          vars:
+            _on_demand_id: "{{ aws_output.stack_outputs.InstanceId if not retry|default(0) else 'TBA' }}"
+            _id: "{{ _on_demand_id if _on_demand_id!='TBA' else asgs.results[0].instances[0].instance_id }}"
+          set_fact:
+            instance_id: "{{ _id }}"
+
+        when: instance_id is not defined  # Allow Playbook to be run with a pre-deployed instance ID, could also lookup by name
+
+      - name: Lookup default VPC id
+        ec2_vpc_net_facts:
+          region: "{{ cheapest_region }}"
+          filters:
+            isDefault: "true"
+        register: default_vpc
+
+      - name: Lookup default VPC route table id
+        ec2_vpc_route_table_facts:
+          region: "{{ cheapest_region }}"
+          filters:
+            vpc-id: "{{ default_vpc.vpcs[0].id }}"
+        register: default_route_table
+      - debug: var=default_route_table
+
+      - name: Add IPv6 default route, ec2_vpc_route_table not ipv6 enabled
+        vars:
+          _rt: "{{ default_route_table.route_tables[0] }}"
+          _igw_id: "{{ _rt.routes | selectattr('destination_cidr_block','eq','0.0.0.0/0') | map(attribute='gateway_id') | first }}"
+        local_action: command aws ec2 create-route --region {{ cheapest_region }} --route-table-id {{_rt.id}}
+                                                   --destination-ipv6-cidr-block "::/0" --gateway-id {{_igw_id}}
+
+      - include_tasks: configure_instance.yml
+
+      vars:
+        _supported_regions:
+          - "us-east-1"
+          - "us-east-2"
+          - "us-west-1"
+          - "us-west-2"
+          - "ap-northeast-1"  # Tokyo
+          - "ap-southeast-1"  # Singapore
+        _selected_regions: "{{ [ pick_region ] if pick_region is defined else _supported_regions }}"
+        _instance_type: "{{ instance_type | default('i3.metal') }}"
+        _spot_price: "{{ spotprice | default( 5.00 ) }}" # Default 100% of on-demand price for i3.metal
+        _kind: "{{ 'Spot' if _spot_price|float > 0 else 'On-demand' }}"
+        _user: "{{ aws_user.arn.split('/') | last }}"
+        _keypair: "simplify_key_{{_user}}"
+        _name: "{{_kind}}-{{ _instance_type }}-{{ altname|default(_user) }}"  # Including full date fails -{{ lookup('pipe','date +%R') }}
+        _formatted_name: "{{ _name | regex_replace('[.:]','-') }}"
+
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ AWS_ACCESS_KEY_ID }}"
+        AWS_SECRET_ACCESS_KEY: "{{ AWS_SECRET_ACCESS_KEY }}"
+        http_proxy: "{{ http_proxy | default('') }}"
+        https_proxy: "{{ http_proxy | default('') }}"
+        no_proxy: "{{ lookup('env','no_proxy') }}"

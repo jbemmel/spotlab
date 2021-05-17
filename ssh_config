@@ -1,0 +1,8 @@
+StrictHostKeyChecking   no
+UserKnownHostsFile      /dev/null
+
+# Let root use SSH key under /home/adventure too
+Host gitlab.com
+    HostName gitlab.com
+    User git
+    IdentityFile /home/adventure/.ssh/id_rsa

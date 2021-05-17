@@ -1,0 +1,11 @@
+# Ansible inventory file for all supported AWS regions to operate on
+
+[aws_regions]
+us-east-1
+us-east-2
+us-west-1
+us-west-2
+
+[aws_regions:vars]
+ansible_host=localhost
+ansible_connection=local

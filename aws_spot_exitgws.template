@@ -1,0 +1,90 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Allocates a cheap i3.metal instance with CentOS 7, for testing purposes",
+  "Mappings" : {
+      "RegionMap" : {
+          "us-east-1" : {
+              "AMI" : "ami-02eac2c0129f6376b"
+          },
+          "us-east-2" : {
+              "AMI" : "ami-0f2b4fc905b0bd1f1"
+          },
+          "us-west-2" : {
+              "AMI" : "ami-01ed306a12b7d1c96"
+          },
+          "us-west-1" : {
+              "AMI" : "ami-074e2d6769f445be5"
+          }
+      }
+  },
+  "Parameters": {
+    "SpotPrice" : {
+      "Description" : "Maximum spot price to bid in USD ($1.50 is current i3.metal spot price, $0.82 for m5d.metal). Affects termination",
+      "Default" : "2.50",
+      "Type" : "Number"
+    },
+    "InstanceType" : {
+      "Description" : "EC2 bare metal instance type (i3.metal, etc). m5d.metal has lower spot price, but CentOS only supports i3.metal",
+      "Type" : "String",
+      "Default" : "i3.metal",
+      "AllowedValues" : ["i3.metal","m5d.metal"],
+      "ConstraintDescription" : "Must be a valid EC2 bare metal type."
+    },
+    "AllowAccessFrom": {
+      "Description": "The net block (CIDR) that SSH and other protocols access is available to.",
+      "Default": "0.0.0.0/0",
+      "Type": "String"
+    },
+    "KeyPair" : {
+      "Description" : "The name of an EC2 Key Pair to allow SSH access to the instance.",
+      "Type" : "AWS::EC2::KeyPair::KeyName",
+      "Default" : "simplify_key"
+    }
+  },
+  "Resources": {
+    "NuageSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Nuage SecurityGroup",
+        "SecurityGroupIngress": [
+          {"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "CidrIp": {"Ref": "AllowAccessFrom"} },
+          {"IpProtocol": "tcp", "FromPort": "8443", "ToPort": "8443", "CidrIp": {"Ref": "AllowAccessFrom"} },
+          {"IpProtocol": "tcp", "FromPort": "6633", "ToPort": "6633", "CidrIp": "0.0.0.0/0" },
+          {"IpProtocol": "tcp", "FromPort": "7406", "ToPort": "7407", "CidrIp": "0.0.0.0/0" },
+          {"IpProtocol": "udp", "FromPort": "123", "ToPort": "123", "CidrIp": "0.0.0.0/0" },
+          {"IpProtocol": "udp", "FromPort": "4500", "ToPort": "4500", "CidrIp": "0.0.0.0/0" },
+          {"IpProtocol": "udp", "FromPort": "4789", "ToPort": "4789", "CidrIp": "0.0.0.0/0" }
+        ]
+      }
+    },
+    "NuageServerAutoScale": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        // "AvailabilityZones": [ "us-east-2a", "us-east-2b" ],
+		"VPCZoneIdentifier" : [ "wan-subnet-A", "wan-subnet-B" ]
+        "LaunchConfigurationName": {"Ref": "NuageServerLaunchConfig"},
+        "MinSize": "1",
+        "MaxSize": "4",
+        "DesiredCapacity": "1",
+        "Tags": [
+            {"Key": "Name", "Value": { "Ref" : "AWS::StackName" }, "PropagateAtLaunch": true}
+        ]
+      }
+    },
+    "NuageServerLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "SpotPrice" : { "Ref" : "SpotPrice" },
+        "ImageId" : { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "AMI" ]},
+        "InstanceType": {"Ref": "InstanceType"},
+        "KeyName": {"Ref": "KeyPair"},
+        "SecurityGroups": [{"Ref": "NuageSecurityGroup"}],
+        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+         "#!/bin/bash -xe\n",
+         "yum update -y\n"
+         ]]}
+        }
+      }
+    }
+  }
+}

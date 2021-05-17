@@ -370,7 +370,7 @@
       when: iptables_check.rc != 0
 
     - name: Deploy AWS Lab container with toolkit to init host
-      command: docker run -d --name awslab -v /home/awslab:/awslab:Z eccloud/awslab /bin/bash
+      command: docker run -d --name awslab -v /home/awslab:/awslab:Z eccloud/aws-lab /bin/bash
     delegate_to: "BaremetalInstance"
     become: true
     become_user: root

@@ -18,7 +18,7 @@ function show_usage() {
  echo "[provided sshd is running on the local host]"
  echo "If you do not want this, simply press CTRL+C"
 
- /orig_adventure/install_adventure.sh 172.17.0.1
+ # /orig_adventure/install_adventure.sh 172.17.0.1
  exit $?
 }
 

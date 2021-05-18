@@ -10,7 +10,7 @@ export HOME=/home/awslab
 #
 function show_usage() {
  echo "Copyright (C) 2018-2021 Nokia, all rights reserved. Version 1.0 2021-05-16"
- echo "Usage: docker run -it --rm -v /home/awslab:$HOME:Z eccloud/aws-lab [ git ]"
+ echo "Usage: docker run -it --rm --device /dev/fuse --cap-add SYS_ADMIN -v /home/awslab:$HOME:Z eccloud/aws-lab [ git ]"
  echo "  (the ':Z' is for SELinux relabeling)"
  echo "  tip: You can add '--dns:x.x.x.x' to specify a DNS server for the Ansible host (this container) to use"
  echo ""
@@ -100,7 +100,7 @@ if [ ! -e $HOME/local_settings.yml ]; then
 # AWS_ACCESS_KEY_ID: "xxxx"
 # AWS_SECRET_ACCESS_KEY: "yyyy"
 # AWS_REGION: "us-east-1"
-# simplify_bucket: "awslab-files-unique"
+# awslab_bucket: "awslab-files-unique"
 awslab_cache_downloads_in_s3: true
 
 # Optional HTTP proxy
@@ -142,8 +142,8 @@ fi
 echo "This is a Docker shell for AWS Lab $AWSLAB_RELEASE. Use <CTRL>-(p + q) to exit while keeping the container running - "
 echo "alias 'launch_instance' is defined for your convenience"
 echo "Available host disk space under $HOME: `df -h $HOME | awk '/home\/awslab/ { print $4 }'`"
-cat > /etc/profile.d/adventure.sh << EOF
-# ADVenture alias entries
+cat > /etc/profile.d/awslab.sh << EOF
+# AWS Lab alias entries
 
 # User specific aliases and functions
 if [[ "$1" == "git" || "$1" == "root" ]]; then
@@ -153,7 +153,7 @@ fi
 
 alias aled='echo "ls -r VSR*/*" | sftp -i /home/awslab/.ssh/id_rsa sftp@192.11.249.8'
 
-# Run a given playbook as the 'adventure' user, and timestamp the log
+# Run a given playbook as the 'awslab' user, and timestamp the log
 run_playbook() {
   if [[ "$1" == "git" || "$1" == "root" ]]; then
    SETPRIV="setpriv --reuid 1100 --regid 1100 --clear-groups"
@@ -182,6 +182,11 @@ EOF
 
 # Change ownership to our awslab user
 chown -R awslab:awslab $HOME
+
+# Mount S3 bucket (TODO auto-load Docker images from there?)
+mkdir -p "$HOME/s3"
+# TODO security credentials
+# s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
 
 #su - adventure -c "cd ${AWSLAB_ROOT} && \
 #  NODE_PATH=/usr/local/ansible/node_modules/ ANSIBLE_SKIP_TAGS='${ANSIBLE_SKIP_TAGS}' \

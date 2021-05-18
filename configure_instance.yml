@@ -221,7 +221,7 @@
     - name: Define available disks, hardcoded for now
       set_fact:
         instance_disks:
-          - { dev: "/dev/nvme1n1", path: '/home/simplify' }
+          - { dev: "/dev/nvme1n1", path: '/home/awslab' }
           - { dev: "/dev/nvme2n1", path: '/home/images' }
           - { dev: "/dev/nvme3n1", path: '/var/lib/docker' }  # For overlay FS, becomes large
           # 5 more available, only nvme0n1 is available on boot (8GB)
@@ -260,14 +260,14 @@
         - { 'src' : '/home/awslab/.ssh/id_rsa', 'path' : '.ssh/', 'mode' : '0400' }
         - { 'src' : '/home/awslab/.ssh/id_rsa.pub', 'path' : '.ssh/' }
         # Make sure this gets the right SELinux context system_u:object_r:usr_t:s0
-        - { 'src' : '/home/simplify/.ssh/authorized_keys',
+        - { 'src' : '/home/awslab/.ssh/authorized_keys',
             'path' : '.ssh/authorized_keys', setype: 'usr_t' }
       copy:
         src: "{{ _file.src }}"
-        dest: "/home/simplify/{{ _file.path }}"
+        dest: "/home/awslab/{{ _file.path }}"
         mode: "{{ _file.mode | default( '0644' ) }}"
-        owner: 'simplify'
-        group: 'simplify'
+        owner: 'awslab'
+        group: 'awslab'
         setype: "{{ _file.setype | default('_default') }}"
 
     - name: Allow 'awslab' group to use sudo without password
@@ -292,7 +292,7 @@
 
     - name: Install containerlab
       become: true
-      command: bash -c "$(curl -sL https://get-clab.srlinux.dev)"
+      command: 'bash -c "$(curl -sL https://get-clab.srlinux.dev)"'
 
     - name: Read local settings
       include_vars: file='~/local_settings.yml' name=local_settings

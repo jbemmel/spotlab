@@ -7,7 +7,7 @@ CMD [""]
 RUN yum install -y epel-release && yum update -y && \
     yum install -y python38 && \
     pip3 install --upgrade setuptools && \
-    pip3 install ansible==2.9.0 netmiko netaddr==0.7.19 pexpect pyvmomi virtualenv lxml boto boto3 botocore awscli --upgrade && \
+    pip3 install ansible==2.10.7 netmiko netaddr==0.7.19 pexpect pyvmomi virtualenv lxml boto boto3 botocore awscli --upgrade && \
     yum clean all && rm -rf /var/cache/yum /tmp/* /var/tmp/*
 
 #   mkdir -p /usr/local/ansible && cd /usr/local/ansible && \

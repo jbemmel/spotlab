@@ -261,6 +261,8 @@
         # groups: awslab, docker ??
         # append: yes
 
+    - name: Fix home ownership and permissions
+      ansible.builtin.file: path=/home/awslab/ state=directory owner=awslab group=awslab mode=0755 setype=user_home_dir_t
     - name: Create .ssh dir with correct permissions
       ansible.builtin.file: path=/home/awslab/.ssh state=directory owner=awslab group=awslab mode=0700 setype=ssh_home_t
     - name: Create Docker container root dir
@@ -297,6 +299,8 @@
         src: /home/awslab/.ssh/id_rsa.pub
         dest: /home/awslab/.ssh/authorized_keys
         mode: 0600
+        owner: 'awslab'
+        group: 'awslab'
 
     - name: Allow 'awslab' group to use sudo without password
       become: true

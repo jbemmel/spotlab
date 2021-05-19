@@ -257,6 +257,7 @@
         comment: AWS Lab user account
         uid: 1100 # Matches AWS Lab container user ID
         group: awslab # TODO add to docker group
+        skeleton: /etc/skel
 
         # groups: awslab, docker ??
         # append: yes

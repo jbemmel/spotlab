@@ -162,7 +162,7 @@ run_playbook() {
 }
 
 _mount_s3() {
-  AWSACCESSKEYID=$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=$AWS_SECRET_ACCESS_KEY s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
+  AWSACCESSKEYID=\$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=\$AWS_SECRET_ACCESS_KEY s3fs "awslab-\$AWS_REGION" "\$HOME/s3" -o use_rrs=1 -o use_cache="\$HOME/s3-cache"
 }
 
 alias launch_aws_instance="run_playbook launch_instance"

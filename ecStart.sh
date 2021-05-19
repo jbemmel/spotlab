@@ -161,8 +161,12 @@ run_playbook() {
   time ANSIBLE_LOG_PATH=$LOG_PATH/ansible-\`date +%F_%R\`.log ANSIBLE_CONFIG=${AWSLAB_ROOT}/ansible.cfg \${SETPRIV} ansible-playbook ${AWSLAB_ROOT}/\$1.yml "\${@:2}"
 }
 
+_mount_s3() {
+  AWSACCESSKEYID=$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=$AWS_SECRET_ACCESS_KEY s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
+}
+
 alias launch_aws_instance="run_playbook launch_instance"
-alias mount_s3="TODO s3fs $HOME/s3"
+alias mount_s3="_mount_s3"
 
 export LOG_PATH=$LOG_PATH
 export NODE_PATH=/usr/local/ansible/node_modules/
@@ -177,7 +181,7 @@ if [ -f ${AWSLAB_ROOT}/local_settings.sh ]; then
 fi
 
 # Set prompt to include ADVenture release and host
-PS1="[AWS Lab $AWSLAB_RELEASE on ${ADVENTURE_HOST:-?} \W]\\$ "
+PS1="[AWS Lab $AWSLAB_RELEASE on ${AWSLAB_HOST:-?} \W]\\$ "
 
 EOF
 
@@ -188,7 +192,7 @@ mkdir -p "$HOME/s3" "$HOME/s3-cache"
 chown -R awslab:awslab $HOME
 
 # Mount S3
-AWSACCESSKEYID=$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=$AWS_SECRET_ACCESS_KEY s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
+# AWSACCESSKEYID=$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=$AWS_SECRET_ACCESS_KEY s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
 
 #su - adventure -c "cd ${AWSLAB_ROOT} && \
 #  NODE_PATH=/usr/local/ansible/node_modules/ ANSIBLE_SKIP_TAGS='${ANSIBLE_SKIP_TAGS}' \

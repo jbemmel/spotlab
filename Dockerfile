@@ -43,8 +43,9 @@ COPY --chown=awslab:awslab . /awslab_src
 # Correct VirtualBox file attributes from shared folders; fix Docker
 RUN find /awslab_src -type f \( -not -iname "*.sh" \) -print0 | xargs -0 chmod 644 && \
     find /awslab_src -type f \( -iname "*.sh" \) -print0 | xargs -0 chmod 755 && \
-    find /awslab_src -type d -print0 | xargs -0 chmod 755 && chmod 644 /etc/ansible/* && \
-    sed -i 's|#mount_program|mount_program|g' /etc/containers/storage.conf
+    find /awslab_src -type d -print0 | xargs -0 chmod 755 && chmod 644 /etc/ansible/*
+
+# sed -i 's|#mount_program|mount_program|g' /etc/containers/storage.conf
 
 # Using a build arg to set the release tag, set a default for running docker build manually
 ARG AWSLAB_RELEASE="[custom build]"

@@ -50,7 +50,7 @@
         - debug: var=spot_prices
         - debug: var=cheapest_region_azs
 
-        - name: Create key pair using simplify key
+        - name: Create key pair for labs, per AWS user
           ec2_key:
             name: "{{ _keypair }}"
             key_material: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
@@ -63,7 +63,9 @@
         - name: Make sure default subnets exist in all selected AZs
           with_items: "{{ cheapest_region_azs }}"
           ignore_errors: true
-          local_action: command aws ec2 create-default-subnet --region {{ cheapest_region }} --availability-zone {{ item.az }}
+          local_action: command aws ec2 create-default-subnet
+                        --region {{ cheapest_region }}
+                        --availability-zone {{ item.az }}
 
 # TODO Could generate the template based on Jinja2, and include N>=1 instances
         - name: Deploy CloudFormation template in {{cheapest_region_azs}}
@@ -85,12 +87,12 @@
               MaxSpotPrice: "{{ _spot_price }}"
               AvailabilityZones: "{{ _azs | difference( _exclude ) | join(',') }}"
             tags:
-              Nuage: Simplify
+              Created_By: "AWS Lab"
         - debug: var=aws_output
 
         - name: Wait until spot instance in stack {{_formatted_name}} has been allocated
           when: "retry|default(false) or aws_output.stack_outputs.InstanceId == 'TBA'"
-          ec2_asg_facts:
+          ec2_asg_info:
             name: "{{ _formatted_name }}"
             region: "{{ cheapest_region }}"
           register: asgs
@@ -108,14 +110,14 @@
         when: instance_id is not defined  # Allow Playbook to be run with a pre-deployed instance ID, could also lookup by name
 
       - name: Lookup default VPC id
-        ec2_vpc_net_facts:
+        ec2_vpc_net_info:
           region: "{{ cheapest_region }}"
           filters:
             isDefault: "true"
         register: default_vpc
 
       - name: Lookup default VPC route table id
-        ec2_vpc_route_table_facts:
+        ec2_vpc_route_table_info:
           region: "{{ cheapest_region }}"
           filters:
             vpc-id: "{{ default_vpc.vpcs[0].id }}"
@@ -126,8 +128,11 @@
         vars:
           _rt: "{{ default_route_table.route_tables[0] }}"
           _igw_id: "{{ _rt.routes | selectattr('destination_cidr_block','eq','0.0.0.0/0') | map(attribute='gateway_id') | first }}"
-        local_action: command aws ec2 create-route --region {{ cheapest_region }} --route-table-id {{_rt.id}}
-                                                   --destination-ipv6-cidr-block "::/0" --gateway-id {{_igw_id}}
+        local_action: command aws ec2 create-route
+                      --region {{ cheapest_region }}
+                      --route-table-id {{_rt.id}}
+                      --destination-ipv6-cidr-block "::/0"
+                      --gateway-id {{_igw_id}}
 
       - include_tasks: configure_instance.yml
 
@@ -144,7 +149,7 @@
         _spot_price: "{{ spotprice | default( 5.00 ) }}" # Default 100% of on-demand price for i3.metal
         _kind: "{{ 'Spot' if _spot_price|float > 0 else 'On-demand' }}"
         _user: "{{ aws_user.arn.split('/') | last }}"
-        _keypair: "simplify_key_{{_user}}"
+        _keypair: "awslab_key_{{_user}}"
         _name: "{{_kind}}-{{ _instance_type }}-{{ altname|default(_user) }}"  # Including full date fails -{{ lookup('pipe','date +%R') }}
         _formatted_name: "{{ _name | regex_replace('[.:]','-') }}"
 

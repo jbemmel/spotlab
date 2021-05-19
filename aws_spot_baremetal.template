@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Cheap i3.metal instance at spot pricing",
+  "Description": "Cheap i3.metal CentOS instance at spot pricing",
   "Mappings" : {
       "RegionMap" : {
           "us-east-1" : {
@@ -46,8 +46,7 @@
     },
     "KeyPair" : {
       "Description" : "The name of an EC2 Key Pair to allow SSH access to the instance.",
-      "Type" : "AWS::EC2::KeyPair::KeyName",
-      "Default" : "simplify_key"
+      "Type" : "AWS::EC2::KeyPair::KeyName"
     }
   },
   "Conditions": {
@@ -61,47 +60,27 @@
         "GroupDescription": "SSH SecurityGroup",
         "SecurityGroupIngress": [
           {"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "CidrIp": {"Ref": "AllowAccessFrom"} },
-          {"IpProtocol": "tcp", "FromPort": "80", "ToPort": "80", "CidrIp": {"Ref": "AllowAccessFrom"} },
-		      {"IpProtocol": "tcp", "FromPort": "443","ToPort": "443","CidrIp": {"Ref": "AllowAccessFrom"} },
-          {"IpProtocol": "tcp", "FromPort": "2812", "ToPort": "2812", "CidrIp": {"Ref": "AllowAccessFrom"} },
-          {"IpProtocol": "tcp", "FromPort": "8443", "ToPort": "8443", "CidrIp": {"Ref": "AllowAccessFrom"} },
-		  {"IpProtocol": "tcp", "FromPort": "6200", "ToPort": "6200", "CidrIp": "0.0.0.0/0", "Description" : "ES https" },
-		  {"IpProtocol": "tcp", "FromPort": "6633", "ToPort": "6633", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "6633", "ToPort": "6633", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "tcp", "FromPort": "7406", "ToPort": "7407", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "7406", "ToPort": "7407", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "tcp", "FromPort": "7080", "ToPort": "7080", "CidrIp": "0.0.0.0/0", "Description" : "EJBCA" },
-		  {"IpProtocol": "tcp", "FromPort": "8000", "ToPort": "8000", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "8000", "ToPort": "8000", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "tcp", "FromPort": "8080", "ToPort": "8080", "CidrIp": "0.0.0.0/0" },
-      {"IpProtocol": "tcp", "FromPort": "9000", "ToPort": "9000", "CidrIp": "0.0.0.0/0", "Description" : "Graylog" },
-		  {"IpProtocol": "tcp", "FromPort": "9090", "ToPort": "9090", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "9200", "ToPort": "9200", "CidrIp": "0.0.0.0/0", "Description" : "ES http" },
-		  {"IpProtocol": "tcp", "FromPort": "11443", "ToPort": "11443", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "11443", "ToPort": "11443", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "tcp", "FromPort": "12443", "ToPort": "12443", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "12443", "ToPort": "12443", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "tcp", "FromPort": "39090", "ToPort": "39090", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "tcp", "FromPort": "48179", "ToPort": "48179", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "udp", "FromPort": "123", "ToPort": "123", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "udp", "FromPort": "123", "ToPort": "123", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "udp", "FromPort": "4500", "ToPort": "4500", "CidrIp": "0.0.0.0/0" },
-		  {"IpProtocol": "udp", "FromPort": "4789", "ToPort": "4789", "CidrIp": "0.0.0.0/0" },
           {"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "CidrIpv6": "::/0" },
-		  {"IpProtocol": "4", "CidrIpv6": "::/0", "Description" : "IPv6 VXLAN is sent as IPinIP" },
-		  {"IpProtocol": "icmp","FromPort": "-1", "ToPort": "-1", "CidrIp": "0.0.0.0/0",
-		   "Description" : "NSGs ping proxy during bootstrap" },
-		  {"IpProtocol": "icmpv6", "CidrIpv6": "::/0" }
+          {"IpProtocol": "tcp", "FromPort": "80", "ToPort": "80", "CidrIp": {"Ref": "AllowAccessFrom"} },
+          {"IpProtocol": "tcp", "FromPort": "8080", "ToPort": "80", "CidrIp": {"Ref": "AllowAccessFrom"} },
+		      {"IpProtocol": "tcp", "FromPort": "443","ToPort": "443","CidrIp": {"Ref": "AllowAccessFrom"} },
+          {"IpProtocol": "tcp", "FromPort": "8443", "ToPort": "8443", "CidrIp": {"Ref": "AllowAccessFrom"} },
+          {"IpProtocol": "udp", "FromPort": "4789", "ToPort": "4789",
+           "CidrIp": "0.0.0.0/0", "Description" : "VXLAN" },
+          {"IpProtocol": "4", "CidrIpv6": "::/0", "Description" : "IPv6 VXLAN is sent as IPinIP" },
+          {"IpProtocol": "icmp","FromPort": "-1", "ToPort": "-1", "CidrIp": "0.0.0.0/0",
+    		   "Description" : "Allow pings" },
+    		  {"IpProtocol": "icmpv6", "CidrIpv6": "::/0" }
         ]
       }
     },
 
-    "NuageServerAutoScale": {
+    "AWSLabAutoScale": {
       "Type": "AWS::AutoScaling::AutoScalingGroup",
       "Condition" : "LaunchSpot",
       "Properties": {
         "AvailabilityZones": {"Fn::Split" : [ "," , {"Ref": "AvailabilityZones"} ]},
-        "LaunchConfigurationName": {"Ref": "NuageServerLaunchConfig"},
+        "LaunchConfigurationName": {"Ref": "AWSLabLaunchConfig"},
         "MinSize": "1",
         "MaxSize": "1",
         "DesiredCapacity": "1",
@@ -110,7 +89,7 @@
         ]
       }
     },
-    "NuageServerLaunchConfig": {
+    "AWSLabLaunchConfig": {
       "Type": "AWS::AutoScaling::LaunchConfiguration",
       "Condition" : "LaunchSpot",
       "Properties": {

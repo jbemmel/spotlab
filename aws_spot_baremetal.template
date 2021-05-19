@@ -62,14 +62,12 @@
           {"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "CidrIp": {"Ref": "AllowAccessFrom"} },
           {"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "CidrIpv6": "::/0" },
           {"IpProtocol": "tcp", "FromPort": "80", "ToPort": "80", "CidrIp": {"Ref": "AllowAccessFrom"} },
-          {"IpProtocol": "tcp", "FromPort": "8080", "ToPort": "80", "CidrIp": {"Ref": "AllowAccessFrom"} },
+          {"IpProtocol": "tcp", "FromPort": "8080", "ToPort": "8080", "CidrIp": {"Ref": "AllowAccessFrom"} },
 		      {"IpProtocol": "tcp", "FromPort": "443","ToPort": "443","CidrIp": {"Ref": "AllowAccessFrom"} },
           {"IpProtocol": "tcp", "FromPort": "8443", "ToPort": "8443", "CidrIp": {"Ref": "AllowAccessFrom"} },
-          {"IpProtocol": "udp", "FromPort": "4789", "ToPort": "4789",
-           "CidrIp": "0.0.0.0/0", "Description" : "VXLAN" },
+          {"IpProtocol": "udp", "FromPort": "4789", "ToPort": "4789", "CidrIp": "0.0.0.0/0", "Description" : "VXLAN" },
           {"IpProtocol": "4", "CidrIpv6": "::/0", "Description" : "IPv6 VXLAN is sent as IPinIP" },
-          {"IpProtocol": "icmp","FromPort": "-1", "ToPort": "-1", "CidrIp": "0.0.0.0/0",
-    		   "Description" : "Allow pings" },
+          {"IpProtocol": "icmp","FromPort": "-1", "ToPort": "-1", "CidrIp": "0.0.0.0/0", "Description" : "Allow pings" },
     		  {"IpProtocol": "icmpv6", "CidrIpv6": "::/0" }
         ]
       }

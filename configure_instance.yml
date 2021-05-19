@@ -138,14 +138,14 @@
     _region: "{{ _i.placement.availability_zone[0:-1] }}"
 
 - block:
-  - name: Explain limitation/benefits, flag={{_vsc_eips}}
+  - name: Explain limitation/benefits, flag={{_use_eips}}
     debug:
       msg: |
-        Elastic IPs for VSCs allow physical NSGs to connect using IPv4.
-        However, AWS by default allows max. 5 EIPs/region per account.
-        To enable, set 'use_elastic_ip_for_vsc'
-  - name: Allocate Elastic IPs for VSCs, scarce resource (max 5/region)
-    when: _vsc_eips
+        Elastic IPs allow direct NATted connections to hosted VMs using IPv4.
+        AWS by default allows max. 5 EIPs/region per account, and they cost money.
+        To enable, set 'use_elastic_ips'
+  - name: Allocate Elastic IPs, scarce resource (max 5/region)
+    when: _use_eips
     block:
     - name: List current Elastic IPs
       # ec2_eip_facts:  Ansible 2.6
@@ -200,6 +200,7 @@
     add_host:
       name: "BaremetalInstance"
       groups: [ "servers", "physical_servers" ]
+      ansible_connection: ssh
       ansible_user: centos
       ansible_host: "{{ _i.public_ip_address }}" # XXX make sure this is not replaced by an Elastic IP
 
@@ -247,6 +248,24 @@
     - name: Create AWS Lab log directory on EBS volume
       file: path=/var/log/awslab state=directory mode=0755
 
+    - name: Ensure group "awslab" exists with correct gid
+      ansible.builtin.group: name=awslab state=present gid=1100
+
+    - name: Add the user 'awslab' with a specific uid and a primary group of 'awslab'
+      ansible.builtin.user:
+        name: awslab
+        comment: AWS Lab user account
+        uid: 1100 # Matches AWS Lab container user ID
+        group: awslab # TODO add to docker group
+
+        # groups: awslab, docker ??
+        # append: yes
+
+    - name: Create .ssh dir with correct permissions
+      ansible.builtin.file: path=/home/awslab/.ssh state=directory owner=awslab group=awslab mode=0700 setype=ssh_home_t
+    - name: Create Docker container root dir
+      ansible.builtin.file: path=/home/awslab/container state=directory owner=awslab group=awslab
+
     #- name: Install Simplify; container uses AWS DNS from /etc/resolv.conf
     #  become: no
     #  local_action: shell ssh_user=centos log_path=/var/log/awslab /simplify/Docker/install_simplify.sh {{ _ip }}
@@ -259,9 +278,11 @@
         # TODO - { 'src' : '/home/awslab/nuage.license', 'path' : '' }
         - { 'src' : '/home/awslab/.ssh/id_rsa', 'path' : '.ssh/', 'mode' : '0400' }
         - { 'src' : '/home/awslab/.ssh/id_rsa.pub', 'path' : '.ssh/' }
+
         # Make sure this gets the right SELinux context system_u:object_r:usr_t:s0
         - { 'src' : '/home/awslab/.ssh/authorized_keys',
-            'path' : '.ssh/authorized_keys', setype: 'usr_t' }
+            'path' : '.ssh/authorized_keys', setype: 'usr_t', 'optional' : 1 }
+
       copy:
         src: "{{ _file.src }}"
         dest: "/home/awslab/{{ _file.path }}"
@@ -269,6 +290,13 @@
         owner: 'awslab'
         group: 'awslab'
         setype: "{{ _file.setype | default('_default') }}"
+
+    - name: Create suitable authorized_keys file
+      copy:
+        remote_src: yes
+        src: /home/awslab/.ssh/id_rsa.pub
+        dest: /home/awslab/.ssh/authorized_keys
+        mode: 0600
 
     - name: Allow 'awslab' group to use sudo without password
       become: true
@@ -290,9 +318,15 @@
       # command: "rsync -avzhe ssh --exclude=.git ~/adventure simplify@{{_ip}}:adventure"
       shell: "tar zc ~/adventure/simplify/ | ssh awslab@{{_ip}} 'tar zx -C /'"
 
+    - name: Install Docker
+      yum: name=docker state=latest
+    - name: Enable Docker service
+      service: name=docker state=restarted enabled=yes
+
     - name: Install containerlab
       become: true
-      command: 'bash -c "$(curl -sL https://get-clab.srlinux.dev)"'
+      shell: curl -sL https://get-clab.srlinux.dev | sh
+      # shell: curl -sL https://get-clab.srlinux.dev | sed 's|/usr/bin/env bash|/bin/bash|g' | bash
 
     - name: Read local settings
       include_vars: file='~/local_settings.yml' name=local_settings
@@ -301,7 +335,7 @@
         _priv_ips: "{{ _i.network_interfaces[0].private_ip_addresses[1:] }}"  # Excluding first, primary
         _ipv6_ips: "{{ _i.network_interfaces[0].ipv6_addresses | map(attribute='ipv6_address') | list }}"
         _elastic_ips: "{{ _priv_ips | map(attribute='association') | map(attribute='public_ip') | list
-                          if _vsc_eips else [] }}"
+                          if _use_eips else [] }}"
 
         # AWS SES has endpoints in us-east-1 and us-west-2 (and Europe)
         _ses_region: "{{ 'us-west-2' if 'us-west' in _region else 'us-east-1' }}"
@@ -335,13 +369,13 @@
               pass: "{{ local_settings.AWS_SMTP_SECRET_ACCESS_KEY | default( 'TODO: configure AWS_SMTP_SECRET_ACCESS_KEY' ) }}"
             secureConnection: True # Together with port 465 implicit SSL
       copy:
-        dest: /home/awslab/local_settings.yml
+        dest: /home/awslab/container/local_settings.yml
         owner: 'awslab'
         group: 'awslab'
         content: "{{ local_settings | combine( _overrides, recursive=True ) | to_yaml }}"
     - name: Generate default inventory file with only local Docker host
       copy:
-        dest: /home/awslab/hosts
+        dest: /home/awslab/container/hosts
         owner: 'awslab'
         group: 'awslab'
         content: |
@@ -369,8 +403,13 @@
 
       when: iptables_check.rc != 0
 
-    - name: Deploy AWS Lab container with toolkit to init host
-      command: docker run -d --name awslab -v /home/awslab:/awslab:Z eccloud/aws-lab /bin/bash
+    - name: Deploy AWS Lab container with toolkit to mount S3
+      command: docker run -d --rm --device /dev/fuse --cap-add SYS_ADMIN
+               --privileged
+               --name awslab
+               -v /home/awslab/container:/home/awslab:Z
+               -v /var/run/docker.sock:/var/run/docker.sock
+               eccloud/aws-lab root
     delegate_to: "BaremetalInstance"
     become: true
     become_user: root
@@ -389,4 +428,4 @@
     _ip: "{{ _i.public_ip_address }}"
     _region: "{{ _i.placement.availability_zone[0:-1] }}"
     _vpc_cidr: "{{ ( _i.private_ip_address + '/20' ) | ipaddr(0) }}"  # XXX Hardcoded assumption that VPC uses /20 subnets
-    _vsc_eips: "{{ use_elastic_ip_for_vsc|default(0)|bool }}"
+    _use_eips: "{{ use_elastic_ips|default(0)|bool }}"

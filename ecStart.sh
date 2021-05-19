@@ -65,7 +65,7 @@ if [ "$1" == "git" ]; then
  ln -sf /home/awslab/awslab_git ${AWSLAB_ROOT}
  AWSLAB_RELEASE="[git]"
 else
- ln -sf /orig_adventure ${AWSLAB_ROOT}
+ ln -sf /awslab_src ${AWSLAB_ROOT}
 fi
 
 if [ ! -e $HOME/local_settings.yml ]; then
@@ -140,7 +140,7 @@ fi
 # [ -d /files/.ansible/tmp ] && rm -rf /files/.ansible/tmp/*
 
 echo "This is a Docker shell for AWS Lab $AWSLAB_RELEASE. Use <CTRL>-(p + q) to exit while keeping the container running - "
-echo "alias 'launch_instance' is defined for your convenience"
+echo "alias 'launch_aws_instance' is defined for your convenience"
 echo "Available host disk space under $HOME: `df -h $HOME | awk '/home\/awslab/ { print $4 }'`"
 cat > /etc/profile.d/awslab.sh << EOF
 # AWS Lab alias entries
@@ -162,6 +162,7 @@ run_playbook() {
 }
 
 alias launch_aws_instance="run_playbook launch_instance"
+alias mount_s3="TODO s3fs $HOME/s3"
 
 export LOG_PATH=$LOG_PATH
 export NODE_PATH=/usr/local/ansible/node_modules/
@@ -180,13 +181,14 @@ PS1="[AWS Lab $AWSLAB_RELEASE on ${ADVENTURE_HOST:-?} \W]\\$ "
 
 EOF
 
+# Create S3 mountpoint (TODO auto-load Docker images from there?)
+mkdir -p "$HOME/s3" "$HOME/s3-cache"
+
 # Change ownership to our awslab user
 chown -R awslab:awslab $HOME
 
-# Mount S3 bucket (TODO auto-load Docker images from there?)
-mkdir -p "$HOME/s3"
-# TODO security credentials
-# s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
+# Mount S3
+AWSACCESSKEYID=$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=$AWS_SECRET_ACCESS_KEY s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
 
 #su - adventure -c "cd ${AWSLAB_ROOT} && \
 #  NODE_PATH=/usr/local/ansible/node_modules/ ANSIBLE_SKIP_TAGS='${ANSIBLE_SKIP_TAGS}' \

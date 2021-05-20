@@ -14,7 +14,9 @@ It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of mi
    ```AWS_ACCESS_KEY_ID: "...."```
    ```AWS_SECRET_ACCESS_KEY: "...."```
 
-3. Run ```spotlab_launch_aws_instance -e spotprice=2.50``` -> you get an AWS Spot baremetal instance if available for $2.50/hour or less
+3. Run ```spotlab_launch_aws_instance -e spotprice=2.50``` -> you get an AWS Spot baremetal instance if available for $2.50/hour or less.
+
+   You can use ```-e altname=myname``` to launch additional labs with different names.
 
 4. SSH to your new lab using the IP address printed in the output. 
    Note that you can see and manage your instance at https://console.aws.amazon.com/cloudformation

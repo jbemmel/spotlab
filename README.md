@@ -4,11 +4,11 @@ Sets up a virtual lab environment to run Containerlab and SR Linux, using an AWS
 ## Getting started
 1. Run the spotlab Docker container, mounting a home volume on the host:
 
-```docker run -it --rm -v /home/spotlab:/home/spotlab:Z eccloud/spotlab```
+   ```docker run -it --rm -v /home/spotlab:/home/spotlab:Z eccloud/spotlab```
 
 2. Inside the shell, edit ~/local_settings.yml and insert your AWS credentials
 
-3. Run ```spotlab_deploy``` -> you get an AWS Spot baremetal instance
+3. Run ```spotlab_launch_aws_instance``` -> you get an AWS Spot baremetal instance
 
 4. SSH to your new lab using the IP address printed in the output
 

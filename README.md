@@ -16,7 +16,8 @@ It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of mi
 
 3. Run ```spotlab_launch_aws_instance -e spotprice=2.50``` -> you get an AWS Spot baremetal instance if available for $2.50/hour or less
 
-4. SSH to your new lab using the IP address printed in the output
+4. SSH to your new lab using the IP address printed in the output. 
+   Note that you can see and manage your instance at https://console.aws.amazon.com/cloudformation
 
 ## Obtaining and working with container images
 Once you get a SpotLab instance up and running, you will likely need to obtain container images. There are various ways to go about this:

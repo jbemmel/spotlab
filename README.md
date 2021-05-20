@@ -12,6 +12,7 @@ It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of mi
 2. Inside the shell, edit ~/local_settings.yml and insert your AWS credentials:
    
    ```AWS_ACCESS_KEY_ID: "...."```
+
    ```AWS_SECRET_ACCESS_KEY: "...."```
 
 3. Run ```spotlab_launch_aws_instance -e spotprice=2.50``` -> you get an AWS Spot baremetal instance if available for $2.50/hour or less.

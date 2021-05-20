@@ -1,4 +1,8 @@
 ---
+- name: Set global variables
+  set_fact:
+    _home: "/home/spotlab"
+
 - name: Get instance {{instance_id}} facts including public IP
   register: ec2_instance_facts
   ec2_instance_facts:
@@ -447,4 +451,3 @@
     _region: "{{ _i.placement.availability_zone[0:-1] }}"
     _vpc_cidr: "{{ ( _i.private_ip_address + '/20' ) | ipaddr(0) }}"  # XXX Hardcoded assumption that VPC uses /20 subnets
     _use_eips: "{{ use_elastic_ips|default(0)|bool }}"
-    _home: "/home/spotlab"

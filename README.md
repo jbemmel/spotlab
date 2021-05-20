@@ -9,9 +9,12 @@ It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of mi
 
    ```docker run -it --rm -v /home/spotlab:/home/spotlab:Z eccloud/spotlab```
 
-2. Inside the shell, edit ~/local_settings.yml and insert your AWS credentials
+2. Inside the shell, edit ~/local_settings.yml and insert your AWS credentials:
+   
+   ```AWS_ACCESS_KEY_ID: "...."```
+   ```AWS_SECRET_ACCESS_KEY: "...."```
 
-3. Run ```spotlab_launch_aws_instance``` -> you get an AWS Spot baremetal instance
+3. Run ```spotlab_launch_aws_instance -e spotprice=2.50``` -> you get an AWS Spot baremetal instance if available for $2.50/hour or less
 
 4. SSH to your new lab using the IP address printed in the output
 

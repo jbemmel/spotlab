@@ -4,20 +4,17 @@
 set -e
 # set -x # debug
 
-export HOME=/home/awslab
+export HOME=/home/spotlab
 
 #
-# Start script for Nuage Simplify container
+# Start script for SpotLab container
 #
 function show_usage() {
  echo "Copyright (C) 2018-2021 Nokia, all rights reserved. Version 1.0 2021-05-16"
- echo "Usage: docker run -it --rm --device /dev/fuse --cap-add SYS_ADMIN -v /home/awslab:$HOME:Z eccloud/aws-lab [ git ]"
+ echo "Usage: docker run -it --rm --device /dev/fuse --cap-add SYS_ADMIN -v $HOME:$HOME:Z eccloud/spotlab [ git ]"
  echo "  (the ':Z' is for SELinux relabeling)"
  echo "  tip: You can add '--dns:x.x.x.x' to specify a DNS server for the Ansible host (this container) to use"
  echo ""
- echo "For your convenience, we can install a '$HOME/restart.sh' script with the correct startup parameters."
- echo "[provided sshd is running on the local host]"
- echo "If you do not want this, simply press CTRL+C"
 
  # /orig_adventure/install_adventure.sh 172.17.0.1
  exit $?
@@ -28,9 +25,9 @@ if [ $# == 0 ] || [ ! -d $HOME/ ]; then
 fi
 
 # Create log directory & designs directory; logs may be bind-mounted
-LOG_PATH="/var/log/awslab"
+LOG_PATH="/var/log/spotlab"
 if [ -d $LOG_PATH ]; then
-chown -R awslab:awslab $LOG_PATH
+chown -R spotlab:spotlab $LOG_PATH
 else
 LOG_PATH="$HOME/logs"
 mkdir -p $LOG_PATH

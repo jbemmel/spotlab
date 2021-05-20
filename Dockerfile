@@ -1,6 +1,6 @@
 FROM centos
 
-ENTRYPOINT ["/awslab_src/ecStart.sh"]
+ENTRYPOINT ["/spotlab_src/ecStart.sh"]
 CMD [""]
 
 # removed openpyxl for Excel, libssl2-dev
@@ -33,18 +33,18 @@ RUN yum install gcc libstdc++-devel gcc-c++ fuse fuse-devel curl-devel libxml2-d
 COPY ansible.cfg /etc/ansible/
 COPY ssh_config /root/.ssh/config
 
-# Define a non-root user to own processes, but don't create /home/awslab yet
-RUN groupadd --gid 1100 awslab && \
-    useradd -r -u 1100 -g awslab --no-create-home awslab && \
+# Define a non-root user to own processes, but don't create /home/spotlab yet
+RUN groupadd --gid 1100 spotlab && \
+    useradd -r -u 1100 -g spotlab --no-create-home spotlab && \
     chmod 600 /root/.ssh/config && \
-    echo "awslab	ALL=(ALL)	NOPASSWD: ALL" >> /etc/sudoers
+    echo "spotlab	ALL=(ALL)	NOPASSWD: ALL" >> /etc/sudoers
 
-COPY --chown=awslab:awslab . /awslab_src
+COPY --chown=spotlab:spotlab . /spotlab_src
 
 # Correct VirtualBox file attributes from shared folders; fix Docker
-RUN find /awslab_src -type f \( -not -iname "*.sh" \) -print0 | xargs -0 chmod 644 && \
-    find /awslab_src -type f \( -iname "*.sh" \) -print0 | xargs -0 chmod 755 && \
-    find /awslab_src -type d -print0 | xargs -0 chmod 755 && chmod 644 /etc/ansible/*
+RUN find /spotlab_src -type f \( -not -iname "*.sh" \) -print0 | xargs -0 chmod 644 && \
+    find /spotlab_src -type f \( -iname "*.sh" \) -print0 | xargs -0 chmod 755 && \
+    find /spotlab_src -type d -print0 | xargs -0 chmod 755 && chmod 644 /etc/ansible/*
 
 # sed -i 's|#mount_program|mount_program|g' /etc/containers/storage.conf
 

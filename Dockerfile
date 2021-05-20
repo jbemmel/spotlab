@@ -49,7 +49,7 @@ RUN find /awslab_src -type f \( -not -iname "*.sh" \) -print0 | xargs -0 chmod 6
 # sed -i 's|#mount_program|mount_program|g' /etc/containers/storage.conf
 
 # Using a build arg to set the release tag, set a default for running docker build manually
-ARG AWSLAB_RELEASE="[custom build]"
-ENV AWSLAB_RELEASE=$AWSLAB_RELEASE
+ARG SPOTLAB_RELEASE="[custom build]"
+ENV SPOTLAB_RELEASE=$SPOTLAB_RELEASE
 
 # USER adventure # Permission issues, need to start as root

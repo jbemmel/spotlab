@@ -1,4 +1,4 @@
-NAME        := eccloud/aws-lab
+NAME        := eccloud/spot-lab
 LAST_COMMIT := $(shell sh -c "git log -1 --pretty=%h")
 TODAY       := $(shell sh -c "date +%Y%m%d_%H%M")
 TAG         := ${TODAY}.${LAST_COMMIT}
@@ -11,7 +11,7 @@ DOCKER_USER := eccloud
 # HTTP_PROXY  := "http://proxy.lbs.alcatel-lucent.com:8000"
 
 build:
-	sudo docker build --build-arg AWSLAB_RELEASE=${TAG} \
+	sudo docker build --build-arg SPOTLAB_RELEASE=${TAG} \
 	  --build-arg http_proxy=${HTTP_PROXY} --build-arg https_proxy=${HTTP_PROXY} \
 	  -f Dockerfile -t ${IMG} .
 	sudo docker tag ${IMG} ${LATEST}

@@ -249,18 +249,20 @@
     - name: Regenerate Grub config; requires reboot
       shell: /usr/sbin/grub2-mkconfig > /boot/grub2/grub.cfg
 
-    - name: Create AWS Lab log directory on EBS volume
+    - name: Create SpotLab log directory on EBS volume
       file: path=/var/log/spotlab state=directory mode=0755
 
     - name: Ensure group "spotlab" exists with correct gid
       ansible.builtin.group: name=spotlab state=present gid=1100
+    - name: Ensure group "docker" exists with correct gid
+      ansible.builtin.group: name=docker state=present gid=1750
 
     - name: Add the user 'spotlab' with a specific uid and a primary group of 'awslab'
       ansible.builtin.user:
         name: spotlab
         comment: SpotLab user account
-        uid: 1100 # Matches AWS Lab container user ID
-        group: spotlab # TODO add to docker group
+        uid: 1100 # Matches SpotLab container user ID
+        groups: spotlab, docker
         skeleton: /etc/skel
 
         # groups: awslab, docker ??
@@ -345,8 +347,6 @@
       yum: name=docker state=latest
     - name: Enable Docker service
       service: name=docker state=restarted enabled=yes
-    - name: Let spotlab group own the docker socket
-      command: chown :spotlab /var/run/docker.sock
 
     - name: Install containerlab
       become: true

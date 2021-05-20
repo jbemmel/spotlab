@@ -19,15 +19,15 @@
       block: |
         StrictHostKeyChecking   no
         UserKnownHostsFile      /dev/null
-        IdentityFile /home/awslab/.ssh/id_rsa
+        IdentityFile {{ _home }}/.ssh/id_rsa
 
         # AWS bare metal instances, Include has permissions / lookup issues
-        # Include /home/simplify/.ssh/aws_bare_metal
+        # Include {{ _home }}/.ssh/aws_bare_metal
         # AWS bare metal {{_kind}} instance {{ instance_id }} in AZ {{ _az }}
-        Host awslab.{{_az}}
+        Host spotlab.aws.{{_az}}
           HostName {{ _i.public_ip_address }}
           # root account is 'centos'
-          User awslab
+          User spotlab
 
   - name: Allocate secondary private IPs ( private_ips == {{ _private_ips }} )
     vars:
@@ -222,7 +222,7 @@
     - name: Define available disks, hardcoded for now
       set_fact:
         instance_disks:
-          - { dev: "/dev/nvme1n1", path: '/home/awslab' }
+          - { dev: "/dev/nvme1n1", path: '{{ _home }}' }
           - { dev: "/dev/nvme2n1", path: '/home/images' }
           - { dev: "/dev/nvme3n1", path: '/var/lib/docker' }  # For overlay FS, becomes large
           # 5 more available, only nvme0n1 is available on boot (8GB)
@@ -246,28 +246,28 @@
       shell: /usr/sbin/grub2-mkconfig > /boot/grub2/grub.cfg
 
     - name: Create AWS Lab log directory on EBS volume
-      file: path=/var/log/awslab state=directory mode=0755
+      file: path=/var/log/spotlab state=directory mode=0755
 
-    - name: Ensure group "awslab" exists with correct gid
-      ansible.builtin.group: name=awslab state=present gid=1100
+    - name: Ensure group "spotlab" exists with correct gid
+      ansible.builtin.group: name=spotlab state=present gid=1100
 
-    - name: Add the user 'awslab' with a specific uid and a primary group of 'awslab'
+    - name: Add the user 'spotlab' with a specific uid and a primary group of 'awslab'
       ansible.builtin.user:
-        name: awslab
-        comment: AWS Lab user account
+        name: spotlab
+        comment: SpotLab user account
         uid: 1100 # Matches AWS Lab container user ID
-        group: awslab # TODO add to docker group
+        group: spotlab # TODO add to docker group
         skeleton: /etc/skel
 
         # groups: awslab, docker ??
         # append: yes
 
     - name: Fix home ownership and permissions
-      ansible.builtin.file: path=/home/awslab/ state=directory owner=awslab group=awslab mode=0755 setype=user_home_dir_t
+      ansible.builtin.file: path="{{ _home }}" state=directory owner=spotlab group=spotlab mode=0755 setype=user_home_dir_t
     - name: Create .ssh dir with correct permissions
-      ansible.builtin.file: path=/home/awslab/.ssh state=directory owner=awslab group=awslab mode=0700 setype=ssh_home_t
+      ansible.builtin.file: path="{{_home }}/.ssh" state=directory owner=spotlab group=spotlab mode=0700 setype=ssh_home_t
     - name: Create Docker container root dir
-      ansible.builtin.file: path=/home/awslab/container state=directory owner=awslab group=awslab
+      ansible.builtin.file: path="{{_home }}/container" state=directory owner=spotlab group=spotlab
 
     #- name: Install Simplify; container uses AWS DNS from /etc/resolv.conf
     #  become: no
@@ -279,55 +279,55 @@
         loop_var: _file
       with_items:
         # TODO - { 'src' : '/home/awslab/nuage.license', 'path' : '' }
-        - { 'src' : '/home/awslab/.ssh/id_rsa', 'path' : '.ssh/', 'mode' : '0400' }
-        - { 'src' : '/home/awslab/.ssh/id_rsa.pub', 'path' : '.ssh/' }
+        - { 'src' : '{{ _home }}/.ssh/id_rsa', 'path' : '.ssh/', 'mode' : '0400' }
+        - { 'src' : '{{ _home }}/.ssh/id_rsa.pub', 'path' : '.ssh/' }
 
         # Make sure this gets the right SELinux context system_u:object_r:usr_t:s0
-        - { 'src' : '/home/awslab/.ssh/authorized_keys',
+        - { 'src' : '{{ _home }}/.ssh/authorized_keys',
             'path' : '.ssh/authorized_keys', setype: 'usr_t', 'optional' : 1 }
 
       copy:
         src: "{{ _file.src }}"
-        dest: "/home/awslab/{{ _file.path }}"
+        dest: "{{ _home }}/{{ _file.path }}"
         mode: "{{ _file.mode | default( '0644' ) }}"
-        owner: 'awslab'
-        group: 'awslab'
+        owner: 'spotlab'
+        group: 'spotlab'
         setype: "{{ _file.setype | default('_default') }}"
 
     - name: Create suitable authorized_keys file
       copy:
         remote_src: yes
-        src: /home/awslab/.ssh/id_rsa.pub
-        dest: /home/awslab/.ssh/authorized_keys
+        src: "{{ _home }}/.ssh/id_rsa.pub"
+        dest: "{{ _home }}/.ssh/authorized_keys"
         mode: 0600
-        owner: 'awslab'
-        group: 'awslab'
+        owner: 'spotlab'
+        group: 'spotlab'
 
-    - name: Allow 'awslab' group to use sudo without password
+    - name: Allow 'spotlab' group to use sudo without password
       become: true
       lineinfile:
         path: /etc/sudoers
         insertafter: "^%wheel.*"
-        line: "%awslab        ALL=(ALL)       NOPASSWD: ALL # added by AWS Lab"
+        line: "%spotlab        ALL=(ALL)       NOPASSWD: ALL # added by SpotLab"
 
     - name: Define alias to start Docker container
       copy:
-        dest: /etc/profile.d/awslab.sh
+        dest: /etc/profile.d/spotlab.sh
         mode: 0755
         content: |
-          awslab_start() {
+          spotlab_launch_container() {
             docker run -it --rm --device /dev/fuse --cap-add SYS_ADMIN \
               --privileged \
-              --name awslab \
-              -v /home/awslab/container:/home/awslab:Z \
+              --name spotlab \
+              -v {{ _home }}/container:{{ _home }}:Z \
               -v /var/run/docker.sock:/var/run/docker.sock \
-              eccloud/aws-lab
+              eccloud/spotlab
           }
 
     #- name: Start rsync daemon (uses tcp port 873)
     #  service: name=rsyncd state=started
 
-    - name: TODO Upload git repo contents to /home/awslab/
+    - name: TODO Upload git repo contents to {{ _home }}
       when: False
       delegate_to: localhost
       become: false
@@ -335,14 +335,14 @@
       #  src: ~/adventure/
       #  dest: /home/simplify/adventure/
       # command: "rsync -avzhe ssh --exclude=.git ~/adventure simplify@{{_ip}}:adventure"
-      shell: "tar zc ~/adventure/simplify/ | ssh awslab@{{_ip}} 'tar zx -C /'"
+      shell: "tar zc ~/spotlab/ | ssh spotlab@{{_ip}} 'tar zx -C /'"
 
     - name: Install Docker
       yum: name=docker state=latest
     - name: Enable Docker service
       service: name=docker state=restarted enabled=yes
-    - name: Let awslab group own the docker socket
-      command: chown :awslab /var/run/docker.sock
+    - name: Let spotlab group own the docker socket
+      command: chown :spotlab /var/run/docker.sock
 
     - name: Install containerlab
       become: true
@@ -380,6 +380,7 @@
             ipv6_prefix: 124
             # ipv6_local_subnet: "{{ subnet_cidr6 | ipsubnet(125,1) }}"  # Extremely inefficient
             ses_region: "{{ _ses_region }}" # Used when sending test e-mail
+            docker_registry: "https://<aws_account_id>.dkr.ecr.{{ _region }}.amazonaws.com"
           smtp:
             # from: Assume this is set in local_settings
             host: "{{ _ses_endpoint }}"
@@ -390,18 +391,18 @@
               pass: "{{ local_settings.AWS_SMTP_SECRET_ACCESS_KEY | default( 'TODO: configure AWS_SMTP_SECRET_ACCESS_KEY' ) }}"
             secureConnection: True # Together with port 465 implicit SSL
       copy:
-        dest: /home/awslab/container/local_settings.yml
-        owner: 'awslab'
-        group: 'awslab'
+        dest: "{{ _home }}/container/local_settings.yml"
+        owner: 'spotlab'
+        group: 'spotlab'
         content: "{{ local_settings | combine( _overrides, recursive=True ) | to_yaml }}"
     - name: Generate default inventory file with only local Docker host
       copy:
-        dest: /home/awslab/container/hosts
-        owner: 'awslab'
-        group: 'awslab'
+        dest: "{{ _home }}/container/hosts"
+        owner: 'spotlab'
+        group: 'spotlab'
         content: |
           [servers]
-          aws_docker_host ansible_host=172.17.0.1 ansible_user=awslab
+          aws_docker_host ansible_host=172.17.0.1 ansible_user=spotlab
 
     - name: Check if iptables is already configured
       register: iptables_check
@@ -424,8 +425,8 @@
 
       when: iptables_check.rc != 0
 
-    - name: Pull AWS Lab container with toolkit to mount S3
-      command: docker pull eccloud/aws-lab
+    - name: Pull SpotLab container with toolkit to mount S3
+      command: docker pull eccloud/spotlab
 
     delegate_to: "BaremetalInstance"
     become: true
@@ -436,7 +437,7 @@
       msg: |
         The system is ready for use.
         To connect:
-          ssh awslab@{{ _i.public_ip_address }}
+          ssh spotlab@{{ _i.public_ip_address }}
 
   vars:
     _facts: "{{ updated_ec2_instance_facts if updated_ec2_instance_facts is defined and
@@ -446,3 +447,4 @@
     _region: "{{ _i.placement.availability_zone[0:-1] }}"
     _vpc_cidr: "{{ ( _i.private_ip_address + '/20' ) | ipaddr(0) }}"  # XXX Hardcoded assumption that VPC uses /20 subnets
     _use_eips: "{{ use_elastic_ips|default(0)|bool }}"
+    _home: "/home/spotlab"

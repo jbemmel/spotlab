@@ -1,9 +1,9 @@
-# spot-lab
-Sets up a virtual lab environment to run Containerlab and SR Linux, using an AWS metal instance
+# SpotLab
+Sets up a virtual lab environment to run Containerlab and SR Linux, using an AWS metal Spot instance
 
 ## Getting started
 1. Run the spotlab Docker container:
-```docker run -it --rm eccloud/spot-lab```
+```docker run -it --rm eccloud/spotlab```
 
 It will output a suitable commandline for running the container
 
@@ -16,6 +16,6 @@ It will output a suitable commandline for running the container
 5. SSH to your new lab using the IP address printed in the output
 
 ## Obtaining and working with container images
-Once you get SpotLab up and running, you will need to obtain container images. There are various ways to go about this:
+Once you get SpotLab up and running, you will likely need to obtain container images. There are various ways to go about this:
 1. AWS has private Docker repos available 
 2. SpotLab includes an S3 Fuse FS driver that allows you to mount an S3 bucket as storage

@@ -4,6 +4,7 @@ Sets up a virtual lab environment to run Containerlab and SR Linux, using an AWS
 ## Getting started
 1. Run the spotlab Docker container:
 ```docker run -it --rm eccloud/spot-lab```
+
 It will output a suitable commandline for running the container
 
 2. Copy&paste the commandline suggested by SpotLab -> you get a Docker shell

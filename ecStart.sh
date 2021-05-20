@@ -101,7 +101,7 @@ if [ ! -e $HOME/local_settings.yml ]; then
 # AWS_ACCESS_KEY_ID: "xxxx"
 # AWS_SECRET_ACCESS_KEY: "yyyy"
 # AWS_REGION: "us-east-1"
-# awslab_bucket: "awslab-files-unique"
+# AWSLAB_S3_BUCKET: "awslab-unique-bucketname"
 awslab_cache_downloads_in_s3: true
 
 # Optional HTTP proxy
@@ -163,7 +163,9 @@ run_playbook() {
 }
 
 _mount_s3() {
-  AWSACCESSKEYID=\$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=\$AWS_SECRET_ACCESS_KEY s3fs "awslab-\$AWS_REGION" "\$HOME/s3" -o use_rrs=1 -o use_cache="\$HOME/s3-cache"
+  echo "Mounting S3 bucket '\$AWSLAB_S3_BUCKET' on \$HOME/s3..."
+  mkdir -p "\$HOME/s3" "\$HOME/s3-cache"
+  AWSACCESSKEYID=\$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=\$AWS_SECRET_ACCESS_KEY s3fs "\$AWSLAB_S3_BUCKET" "\$HOME/s3" -o use_rrs=1 -o use_cache="\$HOME/s3-cache"
 }
 
 alias launch_aws_instance="run_playbook launch_instance"
@@ -186,14 +188,8 @@ PS1="[AWS Lab $AWSLAB_RELEASE on ${AWSLAB_HOST:-?} \W]\\$ "
 
 EOF
 
-# Create S3 mountpoint (TODO auto-load Docker images from there?)
-mkdir -p "$HOME/s3" "$HOME/s3-cache"
-
 # Change ownership to our awslab user
 chown -R awslab:awslab $HOME
-
-# Mount S3
-# AWSACCESSKEYID=$AWS_ACCESS_KEY_ID AWSSECRETACCESSKEY=$AWS_SECRET_ACCESS_KEY s3fs "awslab-$AWS_REGION" "$HOME/s3" -o use_rrs=1 -o use_cache="$HOME/s3-cache"
 
 #su - adventure -c "cd ${AWSLAB_ROOT} && \
 #  NODE_PATH=/usr/local/ansible/node_modules/ ANSIBLE_SKIP_TAGS='${ANSIBLE_SKIP_TAGS}' \

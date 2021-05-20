@@ -7,7 +7,7 @@
 - debug: var=ec2_instance_facts   # public_ip_address
 
 - block:
-  - name: Update ~/.ssh/config file for easy access to AWS host
+  - name: Update ~/.ssh/config file for easy access to AWS lab host
     tags: ssh_config
     vars:
       _az: "{{ _i.placement.availability_zone }}"
@@ -24,10 +24,10 @@
         # AWS bare metal instances, Include has permissions / lookup issues
         # Include /home/simplify/.ssh/aws_bare_metal
         # AWS bare metal {{_kind}} instance {{ instance_id }} in AZ {{ _az }}
-        Host aws.{{_az}}
+        Host awslab.{{_az}}
           HostName {{ _i.public_ip_address }}
           # root account is 'centos'
-          User simplify
+          User awslab
 
   - name: Allocate secondary private IPs ( private_ips == {{ _private_ips }} )
     vars:
@@ -342,7 +342,7 @@
     - name: Enable Docker service
       service: name=docker state=restarted enabled=yes
     - name: Let awslab group own the docker socket
-      file: path=/var/run/docker.sock group=awslab
+      command: chown :awslab /var/run/docker.sock
 
     - name: Install containerlab
       become: true

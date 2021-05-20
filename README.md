@@ -1,5 +1,6 @@
 # SpotLab
-Sets up a virtual lab environment to run Containerlab and SR Linux, using an AWS metal Spot instance
+Sets up a virtual lab environment to run Containerlab and SR Linux, using an AWS metal Spot instance.
+Using an Ansible script, SpotLab finds the cheapest region matching the hourly price you are willing to pay.
 
 ## Getting started
 1. Run the spotlab Docker container, mounting a home volume on the host:

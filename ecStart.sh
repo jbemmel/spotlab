@@ -2,6 +2,7 @@
 
 # exit on non-zero return code
 set -e
+# set -x # debug
 
 export HOME=/home/awslab
 

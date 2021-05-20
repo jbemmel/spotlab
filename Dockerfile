@@ -36,7 +36,8 @@ COPY ssh_config /root/.ssh/config
 # Define a non-root user to own processes, but don't create /home/awslab yet
 RUN groupadd --gid 1100 awslab && \
     useradd -r -u 1100 -g awslab --no-create-home awslab && \
-    chmod 600 /root/.ssh/config
+    chmod 600 /root/.ssh/config && \
+    echo "awslab	ALL=(ALL)	NOPASSWD: ALL" >> /etc/sudoers
 
 COPY --chown=awslab:awslab . /awslab_src
 

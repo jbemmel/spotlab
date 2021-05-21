@@ -168,6 +168,9 @@ chown -R spotlab:spotlab $HOME
 # sed -i "s/\[\[SIMPLIFY_RELEASE\]\]/$SIMPLIFY_RELEASE/g" ${SPOTLAB_ROOT}/web-ui/index.html
 # sed -i "s/\[\[SIMPLIFY_RELEASE\]\]/$SIMPLIFY_RELEASE/g" ${SPOTLAB_ROOT}/designer/js/Dialogs.js
 
+# Start WebSSH, TODO --certfile='/path/to/cert.crt' --keyfile='/path/to/cert.key'
+wssh --port=8080 --sslport=8443 --fbidhttp=False &
+
 if [[ "$1" == "git" || "$1" == "root" ]]; then
 cd $HOME && /bin/bash --rcfile /etc/bashrc
 else

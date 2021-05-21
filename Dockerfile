@@ -7,7 +7,7 @@ CMD [""]
 RUN yum install -y epel-release && yum update -y && \
     yum install -y python38 sudo && \
     pip3 install --upgrade setuptools && \
-    pip3 install ansible==2.10.7 netmiko netaddr==0.7.19 pexpect pyvmomi virtualenv lxml boto boto3 botocore awscli --upgrade && \
+    pip3 install ansible==2.10.7 netmiko netaddr==0.7.19 pexpect pyvmomi virtualenv lxml boto boto3 botocore awscli pip --upgrade && \
     yum clean all && rm -rf /var/cache/yum /tmp/* /var/tmp/*
 
 #   mkdir -p /usr/local/ansible && cd /usr/local/ansible && \
@@ -38,6 +38,10 @@ RUN groupadd --gid 1100 spotlab && \
     useradd -r -u 1100 -g spotlab --no-create-home spotlab && \
     chmod 600 /root/.ssh/config && \
     echo "spotlab	ALL=(ALL)	NOPASSWD: ALL" >> /etc/sudoers
+
+# Install WebSSH
+RUN pip3 install webssh
+EXPOSE 8080/tcp 8443/tcp
 
 COPY --chown=spotlab:spotlab . /spotlab_src
 

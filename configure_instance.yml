@@ -271,9 +271,11 @@
     - name: Fix home ownership and permissions
       ansible.builtin.file: path="{{ _home }}" state=directory owner=spotlab group=spotlab mode=0755 setype=user_home_dir_t
     - name: Create .ssh dir with correct permissions
-      ansible.builtin.file: path="{{_home }}/.ssh" state=directory owner=spotlab group=spotlab mode=0700 setype=ssh_home_t
+      ansible.builtin.file: path="{{ _home }}/.ssh" state=directory owner=spotlab group=spotlab mode=0700 setype=ssh_home_t
     - name: Create Docker container root dir
-      ansible.builtin.file: path="{{_home }}/container" state=directory owner=spotlab group=spotlab
+      ansible.builtin.file: path="{{ _home }}/container" state=directory owner=spotlab group=spotlab
+    - name: Create .ssh dir for container with correct permissions
+      ansible.builtin.file: path="{{ _home }}/container/.ssh" state=directory owner=spotlab group=spotlab mode=0700 setype=ssh_home_t
 
     #- name: Install Simplify; container uses AWS DNS from /etc/resolv.conf
     #  become: no
@@ -287,6 +289,8 @@
         # TODO - { 'src' : '/home/awslab/nuage.license', 'path' : '' }
         - { 'src' : '{{ _home }}/.ssh/id_rsa', 'path' : '.ssh/', 'mode' : '0400' }
         - { 'src' : '{{ _home }}/.ssh/id_rsa.pub', 'path' : '.ssh/' }
+        - { 'src' : '{{ _home }}/.ssh/id_rsa', 'path' : 'container/.ssh/', 'mode' : '0400' }
+        - { 'src' : '{{ _home }}/.ssh/id_rsa.pub', 'path' : 'container/.ssh/' }
 
         # Make sure this gets the right SELinux context system_u:object_r:usr_t:s0
         - { 'src' : '{{ _home }}/.ssh/authorized_keys',
@@ -323,7 +327,7 @@
         content: |
           spotlab_launch_container() {
             docker run -it --rm --device /dev/fuse --cap-add SYS_ADMIN \
-              --privileged \
+              --privileged -p 8080:8080 -p 8443:8443 \
               --name spotlab \
               -v {{ _home }}/container:{{ _home }}:Z \
               -v /var/run/docker.sock:/var/run/docker.sock \
@@ -384,7 +388,7 @@
             ipv6_prefix: 124
             # ipv6_local_subnet: "{{ subnet_cidr6 | ipsubnet(125,1) }}"  # Extremely inefficient
             ses_region: "{{ _ses_region }}" # Used when sending test e-mail
-            docker_registry: "https://<aws_account_id>.dkr.ecr.{{ _region }}.amazonaws.com"
+            docker_registry: "https://{{ aws_user.account }}.dkr.ecr.{{ _region }}.amazonaws.com"
           smtp:
             # from: Assume this is set in local_settings
             host: "{{ _ses_endpoint }}"
@@ -437,11 +441,14 @@
     become_user: root
 
   - name: Explain next steps
+    vars:
+      _ip: "{{ _i.public_ip_address }}"
     debug:
       msg: |
         The system is ready for use.
         To connect:
-          ssh spotlab@{{ _i.public_ip_address }}
+          ssh spotlab@{{ _ip }}
+          webssh: http://{{ _ip }}:8080/?hostname={{_ip}}&username=spotlab
 
   vars:
     _facts: "{{ updated_ec2_instance_facts if updated_ec2_instance_facts is defined and

@@ -5,18 +5,14 @@ Using an Ansible script, SpotLab finds the cheapest region matching the hourly p
 It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of minutes.
 
 ## Getting started
-1. Run the spotlab Docker container, mounting the current user's home directory as a home volume inside the container:
+1. Create a new user for spotlab and run the spotlab Docker container, mounting the current user's home directory as a home volume inside the container:
 
    ```
+   sudo adduser spotlab
+   su spotlab
    docker run -it --rm -v $HOME:/home/spotlab:Z eccloud/spotlab
    ```
    
-   Alternatively, you can map just local_settings.yml (and have your SSH keys live inside the container):
-   ```
-   touch $HOME/local_settings.yml
-   docker run -it --rm -v $HOME/local_settings.yml:/home/spotlab/local_settings.yml:Z eccloud/spotlab
-   ```
-
 2. Inside the shell, edit ~/local_settings.yml and insert your AWS credentials:
    
    ```AWS_ACCESS_KEY_ID: "...."```

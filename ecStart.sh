@@ -158,7 +158,7 @@ PS1="[SpotLab $SPOTLAB_RELEASE on ${SPOTLAB_HOST:-?} \W]\\$ "
 EOF
 
 # Change ownership to our spotlab user
-chown -R spotlab:spotlab $HOME
+# chown -R spotlab:spotlab $HOME
 
 #su - adventure -c "cd ${SPOTLAB_ROOT} && \
 #  NODE_PATH=/usr/local/ansible/node_modules/ ANSIBLE_SKIP_TAGS='${ANSIBLE_SKIP_TAGS}' \

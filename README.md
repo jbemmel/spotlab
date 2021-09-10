@@ -26,7 +26,8 @@ It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of mi
 3. Run 
    ```
    spotlab_launch_aws_instance -e spotprice=2.50
-   ``` -> you get an AWS Spot baremetal instance if available for $2.50/hour or less.
+   ```
+   -> you get an AWS Spot baremetal instance if available for $2.50/hour or less.
 
    By default this launches a CloudFormation stack with a name including your AWS username; 
    you can use ```-e altname=myname``` to launch additional labs with different names.

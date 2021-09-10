@@ -85,8 +85,17 @@ spotlab_cache_downloads_in_s3: true
 # no_proxy: "list of IPs or fqdns"
 
 EOF
+echo "Created empty local_settings.yml, please edit to provide AWS credentials"
+exit 0
 else
 sed -E 's/:[^:\/\/0-9]/=/g;s/$//g;s/\[//g;s/\]//g;s/ *= */=/g;s/^([^#])/export \1/g' $HOME/local_settings.yml > ${SPOTLAB_ROOT}/local_settings.sh
+
+. ${SPOTLAB_ROOT}/local_settings.sh
+if [[ "$AWS_ACCESS_KEY_ID" == "" ]]; then
+echo "AWS_ACCESS_KEY_ID not defined, please edit local_settings.yml"
+exit 1
+fi
+
 fi
 
 # Copy sample config to root dir, if not existing

@@ -11,7 +11,7 @@ It brings up a CentOS baremetal host using AWS CloudFormation, in a matter of mi
    docker run -it --rm -v $HOME:/home/spotlab:Z eccloud/spotlab
    ```
    
-   Alternatively, you can map just local_settings.yml:
+   Alternatively, you can map just local_settings.yml (and have your SSH keys live inside the container):
    ```
    touch $HOME/local_settings.yml
    docker run -it --rm -v $HOME/local_settings.yml:/home/spotlab/local_settings.yml:Z eccloud/spotlab

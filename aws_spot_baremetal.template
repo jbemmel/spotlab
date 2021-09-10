@@ -97,11 +97,9 @@
         "KeyName": {"Ref": "KeyPair"},
         "SecurityGroups": [{"Ref": "SSHSecurityGroup"}],
         "BlockDeviceMappings": [ { "DeviceName": "/dev/sda1", "Ebs": { "DeleteOnTermination": true } } ],
-        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["\n", [
-         "#!/bin/bash -xe",
-         "yum update -y",
-	 "bash -c \"$(curl -sL https://get-clab.srlinux.dev)\"",
-	 "yum install -y docker-ce"
+        "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+         "#!/bin/bash -xe\n",
+         "yum update -y\n"
          ]]}
         }
       }
@@ -118,11 +116,9 @@
        "KeyName": {"Ref": "KeyPair"},
        "SecurityGroups": [{"Ref": "SSHSecurityGroup"}],
        "BlockDeviceMappings": [ { "DeviceName": "/dev/sda1", "Ebs": { "DeleteOnTermination": true } } ],
-       "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["\n", [
-         "#!/bin/bash -xe",
-         "yum update -y",
-	 "bash -c \"$(curl -sL https://get-clab.srlinux.dev)\"",
-	 "yum install -y docker-ce"
+       "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+         "#!/bin/bash -xe\n",
+         "yum update -y\n"
         ]]}
        }
      }
